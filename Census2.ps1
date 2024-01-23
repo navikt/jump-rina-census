@@ -31,6 +31,31 @@ param (
     [string]$eessi_home = $env:EESSI_HOME
 )
 
+# HolodeckB2B
+function Get-HolodeckVersion {
+    # Construct the path to the version file
+    $versionFilePath = Join-Path $script:eessi_home "HolodeckB2B\ver"
+
+    # Check if the version file exists
+    if (Test-Path $versionFilePath) {
+        # Read the content of the version file
+        $HolodeckB2BVersion = (Get-Content $versionFilePath -Raw).Trim()
+
+        # Create a custom object with the desired properties
+        $holodeckObject = [PSCustomObject]@{
+            DisplayName    = "HolodeckB2B"
+            DisplayVersion = $HolodeckB2BVersion
+            Note    = $null  # You can modify this based on your requirements
+        }
+
+        # Output the custom object
+        return $holodeckObject
+    }
+    else {
+        Write-Host "Version file not found: $versionFilePath"
+    }
+}
+
 # Apache HTTPD
 function Get-ApacheVersion {
 
@@ -49,7 +74,7 @@ function Get-ApacheVersion {
         $newApp = [PSCustomObject]@{
              DisplayName = "Apache HTTPD"
              DisplayVersion = $apacheVersion
-             InstallDate = $null  # or you can set it to $null or any default value
+             Note = $null  # or you can set it to $null or any default value
         }
         $newApp | Format-Table -AutoSize
         # Add the new entry to the installedApps variable
@@ -63,12 +88,8 @@ function Get-ApacheVersion {
 
 # LogStash
 function Get-LogstashVersion {
-    param (
-        [string]$eessi_home
-    )
-
     # Construct the path to the Logstash executable
-    $logstashExecutable = Join-Path $eessi_home "Logstash\bin\logstash.bat"
+    $logstashExecutable = Join-Path $script:eessi_home "Logstash\bin\logstash.bat"
 
     try {
         # Run the Logstash command to get the version information
@@ -81,7 +102,7 @@ function Get-LogstashVersion {
         $newApp = [PSCustomObject]@{
              DisplayName = "logstash"
              DisplayVersion = $logstashVersion
-             InstallDate = $null  # or you can set it to $null or any default value
+             Note = $null  # or you can set it to $null or any default value
         }
         $newApp | Format-Table -AutoSize
         # Add the new entry to the installedApps variable
@@ -94,12 +115,8 @@ function Get-LogstashVersion {
 
 # ElasticSearch
 function Get-ElasticsearchVersion {
-    param (
-        [string]$eessi_home
-    )
-
     # Specify the path to your logstash.conf file
-    $logstashConfigPath = Join-Path $eessi_home "Logstash\config\logstash.conf"
+    $logstashConfigPath = Join-Path $script:eessi_home "Logstash\config\logstash.conf"
 
     # Read the logstash.conf file
     $logstashConfig = Get-Content -Path $logstashConfigPath -Raw
@@ -120,7 +137,7 @@ function Get-ElasticsearchVersion {
             $newApp = [PSCustomObject]@{
                 DisplayName = $versionInfo.name
                 DisplayVersion = $versionInfo.version.number
-                InstallDate = $null  # or you can set it to $null or any default value
+                Note = $null  # or you can set it to $null or any default value
             }
             $newApp | Format-Table -AutoSize
             # Add the new entry to the installedApps variable
@@ -141,24 +158,27 @@ if (-not $eessi_home) {
 # Now you can use $eessi_home in your script
 Write-Host "EESSI_HOME path: $eessi_home"
 
-Get-ComputerInfo | Select-Object WindowsProductName,WindowsInstallDateFromRegistry | Format-Table -AutoSize
+$systemInfo = Get-CimInstance -ClassName Win32_ComputerSystem
+
+
+Get-ComputerInfo | Select-Object WindowsProductName, @{Name='Note'; Expression={
+        $numberOfCores = $systemInfo.NumberOfLogicalProcessors
+        $totalRAMBytes = $systemInfo.TotalPhysicalMemory
+        $totalRAMGB = [math]::round($totalRAMBytes / 1GB, 2)
+        "#cores: $numberOfCores RAM: ${totalRAMGB}GB"
+    }} | Format-Table -AutoSize
 
 # Get a list of all installed apps
 $installedApps = Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*" |
-    Select-Object DisplayName, DisplayVersion, InstallDate
+    Select-Object DisplayName, DisplayVersion, @{Name='Note'; Expression={''}}
 
-$apache = Get-ApacheVersion -eessi_home $eessi_home
-$installedApps += $apache
-
-$logstash = Get-LogstashVersion -eessi_home $eessi_home
-$installedApps += $logstash
-
-$elasticsearch = Get-ElasticsearchVersion -eessi_home $eessi_home
-$installedApps += $elasticsearch
+$installedApps += Get-ApacheVersion
+$installedApps += Get-LogstashVersion
+$installedApps += Get-ElasticsearchVersion 
+$installedApps += Get-HolodeckVersion 
 
 # Filter for rows containing "JDK" or "PostgreSQL"
-$filteredApps = $installedApps | Where-Object { $_.DisplayName -match 'Apache|logstash|elasticsearch|JDK|PostgreSQL|7-Zip|Tomcat' }
+$filteredApps = $installedApps | Where-Object { $_.DisplayName -match 'Apache|logstash|elasticsearch|JDK|PostgreSQL|7-Zip|Tomcat|Holodeck' }
 
 # Display the filtered result
 $filteredApps | Format-Table -AutoSize
-
