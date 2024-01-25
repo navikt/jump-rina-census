@@ -150,6 +150,76 @@ function Get-ElasticsearchVersion {
     }
 }
 
+function Get-PhantomJsVersion {
+    # Run PhantomJS with --version and capture the output
+    $versionOutput = Invoke-Expression "phantomjs --version"
+
+    # Create a custom object with the desired properties
+    $newApp = [PSCustomObject]@{
+        DisplayName = "PhantomJS"
+        DisplayVersion = $versionOutput
+        Note = $null  # or you can set it to $null or any default value
+    }
+
+    # Return the custom object
+    return $newApp
+}
+
+function Get-JavaVersion {
+    param(
+        [string]$note = $null
+    )
+
+    # Run java --version and capture the output
+    $javaVersionOutput = java --version 2>&1
+
+    # Extract the first line
+    $firstLine = ($javaVersionOutput -split "`n" | Where-Object { $_ -ne '' } | Select-Object -First 1).Trim()
+
+    # Extract DisplayName and DisplayVersion from the first line
+    $displayName = ($firstLine -split ' ')[0]
+    $displayVersion = ($firstLine -split ' ')[1]
+
+    # Create a custom object with the desired properties
+    $newApp = [PSCustomObject]@{
+        DisplayName = $displayName
+        DisplayVersion = $displayVersion
+        Note = $note
+    }
+
+    # Return the custom object
+    return $newApp
+}
+
+function Get-InstitutionDetails {
+    $directoryPath = "$script:eessi_home\Share\conf"
+
+    # Get the newest JSON file in the directory
+    $newestJsonFile = Get-ChildItem -Path $directoryPath -Filter "generatedApClientConfiguration-*.json" |
+                      Sort-Object LastWriteTime -Descending |
+                      Select-Object -First 1
+
+    if ($newestJsonFile -ne $null) {
+        # Read the contents of the newest JSON file into a variable
+        $jsonContent = Get-Content $newestJsonFile.FullName -Raw | ConvertFrom-Json
+
+        # Extract the required values and create an object
+        $institutionDetails = [PSCustomObject]@{
+            Institution = $jsonContent.institutionAliasMappings[0].organisation.acronym
+            Country     = $jsonContent.institutionAliasMappings[0].organisation.countryCode
+            Name        = $jsonContent.institutionAliasMappings[0].organisation.name
+            Email       = $null
+        }
+
+        return $institutionDetails
+    } else {
+        Write-Host "No JSON files found in the specified directory."
+        return $null
+    }
+}
+
+# $eessi_home = "D:\EESSI"
+
 # Check if $eessi_home is still empty, and if so, prompt the user for input
 if (-not $eessi_home) {
     $eessi_home = Read-Host "Enter EESSI_HOME path"
@@ -158,6 +228,9 @@ if (-not $eessi_home) {
 # Now you can use $eessi_home in your script
 Write-Host "EESSI_HOME path: $eessi_home"
 
+# INSTITUTION
+Get-InstitutionDetails | Format-Table -AutoSize
+
 $systemInfo = Get-CimInstance -ClassName Win32_ComputerSystem
 
 
@@ -165,7 +238,7 @@ Get-ComputerInfo | Select-Object WindowsProductName, @{Name='Note'; Expression={
         $numberOfCores = $systemInfo.NumberOfLogicalProcessors
         $totalRAMBytes = $systemInfo.TotalPhysicalMemory
         $totalRAMGB = [math]::round($totalRAMBytes / 1GB, 2)
-        "#cores: $numberOfCores RAM: ${totalRAMGB}GB"
+        "#cores: $numberOfCores, total RAM: ${totalRAMGB}GB"
     }} | Format-Table -AutoSize
 
 # Get a list of all installed apps
@@ -175,10 +248,21 @@ $installedApps = Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\Curren
 $installedApps += Get-ApacheVersion
 $installedApps += Get-LogstashVersion
 $installedApps += Get-ElasticsearchVersion 
+$installedApps += Get-PhantomJsVersion
 $installedApps += Get-HolodeckVersion 
 
+# Check if JDK line exists in the installedApps array
+$jdkLine = $installedApps | Where-Object { $_.DisplayName -like "*JDK*" }
+
+# If JDK line exists, extract and remove it, then add its DisplayName as a parameter to Get-JavaVersion
+if ($jdkLine -ne $null) {
+    $installedApps = $installedApps | Where-Object { $_ -ne $jdkLine }
+    $javaVersion = Get-JavaVersion -note $jdkLine.DisplayName
+    $installedApps += $javaVersion
+}
+
 # Filter for rows containing "JDK" or "PostgreSQL"
-$filteredApps = $installedApps | Where-Object { $_.DisplayName -match 'Apache|logstash|elasticsearch|JDK|PostgreSQL|7-Zip|Tomcat|Holodeck' }
+$filteredApps = $installedApps | Where-Object { $_.DisplayName -match 'NSSM|Apache|logstash|elasticsearch|JDK|PostgreSQL|7-Zip|Tomcat|Holodeck|PhantomJS' }
 
 # Display the filtered result
 $filteredApps | Format-Table -AutoSize
