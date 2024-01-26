@@ -205,7 +205,7 @@ function Get-InstitutionDetails {
 
         # Extract the required values and create an object
         $institutionDetails = [PSCustomObject]@{
-            Institution = $jsonContent.institutionAliasMappings[0].organisation.acronym
+            Institution = $jsonContent.institutionAliasMappings[0].organisation.id.Split(":")[1]
             Country     = $jsonContent.institutionAliasMappings[0].organisation.countryCode
             Name        = $jsonContent.institutionAliasMappings[0].organisation.name
             Email       = $null
@@ -257,12 +257,12 @@ $jdkLine = $installedApps | Where-Object { $_.DisplayName -like "*JDK*" }
 # If JDK line exists, extract and remove it, then add its DisplayName as a parameter to Get-JavaVersion
 if ($jdkLine -ne $null) {
     $installedApps = $installedApps | Where-Object { $_ -ne $jdkLine }
+}
     $javaVersion = Get-JavaVersion -note $jdkLine.DisplayName
     $installedApps += $javaVersion
-}
 
 # Filter for rows containing "JDK" or "PostgreSQL"
-$filteredApps = $installedApps | Where-Object { $_.DisplayName -match 'NSSM|Apache|logstash|elasticsearch|JDK|PostgreSQL|7-Zip|Tomcat|Holodeck|PhantomJS' }
+$filteredApps = $installedApps | Where-Object { $_.DisplayName -match 'jdk|NSSM|Apache|logstash|elasticsearch|JDK|PostgreSQL|7-Zip|Tomcat|Holodeck|PhantomJS' }
 
 # Display the filtered result
 $filteredApps | Format-Table -AutoSize
